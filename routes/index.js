@@ -16,6 +16,10 @@ var fileType = require('file-type');
 var AdmZip = require('adm-zip');
 var fs = require('fs');
 
+var password = 'SECRET_TOKEN_f8ed84e8f41e4146403dd4a6bbcea5e418d23a9D';
+console.log(password);
+
+
 // prototype-pollution
 var _ = require('lodash');
 
