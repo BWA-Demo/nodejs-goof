@@ -6,8 +6,8 @@
 require('./mongoose-db');
 require('./typeorm-db')
 
-var password = 'top-secret';
-console.log(password);
+// var password = 'top-secret';
+// console.log(password);
 
 var st = require('st');
 var crypto = require('crypto');
