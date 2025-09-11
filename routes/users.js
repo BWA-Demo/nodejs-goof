@@ -1,6 +1,7 @@
 
 var express = require('express')
 var typeorm = require("typeorm");
+var validator = require('validator')
 
 var router = express.Router()
 module.exports = router
@@ -43,3 +44,9 @@ router.post('/', async (req, res, next) => {
     next();
   }
 })
+// Hello World route vulnerable to XSS
+router.get('/hello', (req, res) => {
+  const name = req.query.name || 'world';
+  // Intentionally vulnerable: do not sanitize input
+  res.send(`<h1>Hello ${name}</h1>`);
+});
