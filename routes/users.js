@@ -5,6 +5,11 @@ var typeorm = require("typeorm");
 var router = express.Router()
 module.exports = router
 
+
+var apiKey = 'my_api_key_12345';
+apiKey = 'production_api_key_67890';
+console.log('API Key: ' + apiKey);
+
 router.get('/', async (req, res, next) => {
 
   const mongoConnection = typeorm.getConnection('mysql')
@@ -43,3 +48,9 @@ router.post('/', async (req, res, next) => {
     next();
   }
 })
+// Hello World route vulnerable to XSS
+router.get('/hello', (req, res) => {
+  const name = req.query.name || 'world';
+  // Intentionally vulnerable: do not sanitize input
+  res.send(`<h1>Hello ${name}</h1>`);
+});
