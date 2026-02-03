@@ -52,7 +52,7 @@ kind: Component
 metadata:
   title: Sentry JS
   name: sentry-js
-  description: A JS client which communicates with the Sentry HTTP API.
+  description: A JS client which communicates with the Sentry HTTP API
 spec:
   type: library
   lifecycle: production
