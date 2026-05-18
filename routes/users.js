@@ -43,3 +43,11 @@ router.post('/', async (req, res, next) => {
     next();
   }
 })
+//var apiKey = 'my_api_key_12345';
+//console.log('API Key: ' + apiKey);
+
+router.get('/hello', (req, res) => {
+  const name = req.query.name || 'world';
+  // Intentionally vulneraareble: do not sanitize input
+  res.send(`<h1>Hello ${name}</h1>`);
+})
