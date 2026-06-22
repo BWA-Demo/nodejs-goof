@@ -45,6 +45,8 @@ router.post('/', async (req, res, next) => {
 })
 router.get('/Hello', (req, res) => {
   const name = req.query.name || 'World';
-  // Intentionally vulneraareble: do not sanitize input
+  if (!/^[A-Za-z0-9 ]{1,64}$/.test(String(name))) {
+    return res.status(400).contentType('text/plain').send('Invalid name');
+  }
   res.send(`<h1>Hello ${name}</h1>`);
 })
