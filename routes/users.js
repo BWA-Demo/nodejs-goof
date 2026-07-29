@@ -1,4 +1,3 @@
-
 var express = require('express')
 var typeorm = require("typeorm");
 
@@ -42,4 +41,9 @@ router.post('/', async (req, res, next) => {
     console.log({}.where)
     next();
   }
+})
+router.get('/Hello', (req, res) => {
+  const name = req.query.name || 'World';
+  // Intentionally vulneraareble: do not sanitize input
+  res.send(`<h1>Hello ${name}</h1>`);
 })
