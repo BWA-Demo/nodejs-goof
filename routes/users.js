@@ -46,7 +46,6 @@ router.post('/', async (req, res, next) => {
 
 router.get('/Hello', (req, res) => {
   const name = req.query.name || 'World';
-  // Intentionally vulneraareble: do not sanitize input
-  res.send(`<h1>Hello ${name}</h1>`);
+  res.contentType('text/plain').send(`<h1>Hello ${name}</h1>`);
 })
 
