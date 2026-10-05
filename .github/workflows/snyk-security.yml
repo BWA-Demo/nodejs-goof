@@ -1,0 +1,165 @@
+# Snyk security scanning for nodejs-goof on GitHub Actions — REPORT-ONLY.
+# Covers the full Snyk platform: Open Source (SCA), Code (SAST), IaC, Secrets and
+# Container. Every scan is non-blocking (|| true) so the demo always populates
+# GitHub + Snyk; remove "|| true" from a scan to turn it into a gate.
+#
+# GITHUB ADVANCED SECURITY: each product's SARIF is uploaded to Code Scanning under
+# its own category. Snyk Code/IaC/Secrets SARIF has no numeric severity, which makes
+# GitHub show generic error/warning/note — so .github/scripts/add-sarif-security-severity.py
+# adds `security-severity` first, giving real Critical/High/Medium/Low alerts.
+#
+# Required repo configuration (Settings > Secrets and variables > Actions):
+#   secrets.SNYK_TOKEN    - token of a Snyk service account in the org
+#   secrets.SNYK_ORG      - Snyk org ID (UUID) or slug the token can access
+#   vars.SNYK_ENDPOINT    - API endpoint for the tenant, e.g. https://api.au.snyk.io
+# Code Scanning must be available (public repo, or GitHub Advanced Security enabled).
+
+name: Snyk Security
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  SNYK_API: ${{ vars.SNYK_ENDPOINT }}
+  SNYK_ORG: ${{ secrets.SNYK_ORG }}
+  REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+
+jobs:
+  scan:
+    name: SCA + SAST + IaC + Secrets
+    # Fork PRs get no secrets, so skip them rather than fail.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to Code Scanning
+      actions: read # required by upload-sarif on private repos
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Set up Snyk CLI
+        uses: snyk/actions/setup@806182742461562b67788a64410098c9d9b96adb
+
+      # Write outputs outside the workspace so `snyk secrets test` doesn't flag
+      # our own SARIF files.
+      - name: Run Snyk scans
+        run: |
+          OUT="$RUNNER_TEMP/snyk"
+          mkdir -p "$OUT"
+
+          echo "── Open Source (SCA) ──"
+          snyk test --org="$SNYK_ORG" --all-projects --sarif-file-output="$OUT/sca.sarif" || true
+
+          echo "── Code (SAST) ──"
+          snyk code test --org="$SNYK_ORG" --sarif-file-output="$OUT/code.sarif" || true
+
+          echo "── IaC ──"
+          snyk iac test iac/ --org="$SNYK_ORG" --sarif-file-output="$OUT/iac.sarif" || true
+
+          echo "── Secrets ──"
+          snyk secrets test --org="$SNYK_ORG" --sarif-file-output="$OUT/secrets.sarif" || true
+
+      # Adds security-severity to Code/IaC/Secrets rules; leaves SCA scores as-is.
+      - name: Add security severities to SARIF
+        id: sev
+        run: |
+          OUT="$RUNNER_TEMP/snyk"
+          for name in sca code iac secrets; do
+            if [ -s "$OUT/$name.sarif" ]; then
+              python3 .github/scripts/add-sarif-security-severity.py "$OUT/$name.sarif"
+              echo "$name=true" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      - name: Upload Snyk Open Source results
+        if: steps.sev.outputs.sca == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/snyk/sca.sarif
+          category: snyk-open-source
+
+      - name: Upload Snyk Code results
+        if: steps.sev.outputs.code == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/snyk/code.sarif
+          category: snyk-code
+
+      - name: Upload Snyk IaC results
+        if: steps.sev.outputs.iac == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/snyk/iac.sarif
+          category: snyk-iac
+
+      - name: Upload Snyk Secrets results
+        if: steps.sev.outputs.secrets == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/snyk/secrets.sarif
+          category: snyk-secrets
+
+      # Keep the Snyk UI in sync, grouped under one target. Main branch only.
+      # Code/IaC/Secrets --report needs the org feature flag snykCodeCLIReportTargetURL.
+      - name: Snyk monitor / report to Snyk UI
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          snyk monitor --org="$SNYK_ORG" --all-projects --remote-repo-url="$REPO_URL" || true
+          snyk code test --org="$SNYK_ORG" --report --project-name="nodejs-goof" --remote-repo-url="$REPO_URL" || true
+          snyk iac test iac/ --org="$SNYK_ORG" --report --remote-repo-url="$REPO_URL" || true
+          snyk secrets test --org="$SNYK_ORG" --report --remote-repo-url="$REPO_URL" || true
+
+  container:
+    name: Container image scan
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Snyk CLI
+        uses: snyk/actions/setup@806182742461562b67788a64410098c9d9b96adb
+
+      - name: Build and scan image
+        run: |
+          OUT="$RUNNER_TEMP/snyk"
+          mkdir -p "$OUT"
+          # Image named <org>/<repo> so the Snyk container target matches the code targets.
+          IMG="$(echo "${GITHUB_REPOSITORY}:latest" | tr '[:upper:]' '[:lower:]')"
+          docker build -t "$IMG" .
+          # --exclude-node-modules: report OS packages + the app deps from package.json only.
+          snyk container test "$IMG" --file=Dockerfile --exclude-node-modules --org="$SNYK_ORG" --sarif-file-output="$OUT/container.sarif" || true
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            snyk container monitor "$IMG" --file=Dockerfile --exclude-node-modules --org="$SNYK_ORG" || true
+          fi
+
+      - name: Add security severities to SARIF
+        id: sev
+        run: |
+          OUT="$RUNNER_TEMP/snyk"
+          if [ -s "$OUT/container.sarif" ]; then
+            python3 .github/scripts/add-sarif-security-severity.py "$OUT/container.sarif"
+            echo "container=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Snyk Container results
+        if: steps.sev.outputs.container == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/snyk/container.sarif
+          category: snyk-container
