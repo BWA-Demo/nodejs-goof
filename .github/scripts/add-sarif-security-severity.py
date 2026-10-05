@@ -13,6 +13,7 @@ score; Snyk Code, IaC and Secrets do not, so this fills the gap:
 GitHub bands: >=9.0 critical, 7.0-8.9 high, 4.0-6.9 medium, 0.1-3.9 low.
 """
 import json
+import os
 import sys
 
 SEVERITY_SCORE = {"critical": 9.5, "high": 8.0, "medium": 5.5, "low": 2.0}
@@ -61,8 +62,22 @@ def process_run(run):
     return len(rules), updated
 
 
+def safe_sarif_path(path):
+    """Resolve path and only allow existing .sarif files under the cwd or RUNNER_TEMP."""
+    resolved = os.path.realpath(path)
+    roots = [os.path.realpath(os.getcwd())]
+    if os.environ.get("RUNNER_TEMP"):
+        roots.append(os.path.realpath(os.environ["RUNNER_TEMP"]))
+    if not resolved.endswith(".sarif") or not os.path.isfile(resolved):
+        sys.exit(f"refusing {path!r}: not an existing .sarif file")
+    if not any(os.path.commonpath([resolved, root]) == root for root in roots):
+        sys.exit(f"refusing {path!r}: outside the working directory and RUNNER_TEMP")
+    return resolved
+
+
 def main(paths):
-    for path in paths:
+    for arg in paths:
+        path = safe_sarif_path(arg)
         with open(path) as f:
             sarif = json.load(f)
         total = updated = 0
