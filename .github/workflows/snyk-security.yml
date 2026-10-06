@@ -43,7 +43,7 @@ jobs:
       security-events: write # upload SARIF to Code Scanning
       actions: read # required by upload-sarif on private repos
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Scans are report-only (|| true), so without this a missing credential would pass green.
       - name: Verify Snyk configuration
@@ -54,7 +54,7 @@ jobs:
             fi
           done
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 18
 
