@@ -11,14 +11,38 @@ score; Snyk Code, IaC and Secrets do not, so this fills the gap:
   3. else use the highest result `level` for the rule (Code, Secrets)
 
 GitHub bands: >=9.0 critical, 7.0-8.9 high, 4.0-6.9 medium, 0.1-3.9 low.
+
+It also pins each run's `automationDetails.id` to a stable Code Scanning category.
+Snyk emits `<tool>/<project>/<index>/<timestamp>` and sometimes omits the index, so
+the category differs between runs and PRs report "configuration not found". We drop
+the timestamp, keep a numeric index (except for Snyk Code, which has none) and end
+the id with "/" so GitHub uses the whole prefix as the category.
 """
 import json
 import os
+import re
 import sys
 
 SEVERITY_SCORE = {"critical": 9.5, "high": 8.0, "medium": 5.5, "low": 2.0}
 LEVEL_SEVERITY = {"error": "high", "warning": "medium", "note": "low"}
 LEVEL_RANK = {"note": 0, "warning": 1, "error": 2}
+
+
+TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+
+
+def stabilize_category(run, index):
+    details = run.get("automationDetails") or {}
+    ident = details.get("id")
+    if not ident:
+        return
+    parts = ident.rstrip("/").split("/")
+    if TIMESTAMP.match(parts[-1]):
+        parts.pop()
+    if run.get("tool", {}).get("driver", {}).get("name") != "SnykCode" and not parts[-1].isdigit():
+        parts.append(str(index))
+    details["id"] = "/".join(parts) + "/"
+    run["automationDetails"] = details
 
 
 def score_to_level(score):
@@ -81,7 +105,8 @@ def main(paths):
         with open(path) as f:
             sarif = json.load(f)
         total = updated = 0
-        for run in sarif.get("runs", []):
+        for index, run in enumerate(sarif.get("runs", [])):
+            stabilize_category(run, index)
             t, u = process_run(run)
             total += t
             updated += u
