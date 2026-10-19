@@ -43,3 +43,8 @@ router.post('/', async (req, res, next) => {
     next();
   }
 })
+
+router.get('/Hello', (req, res) => {
+  const name = req.query.name || 'World';
+  res.contentType('text/plain').send(`<h1>Hello ${name}</h1>`);
+})
