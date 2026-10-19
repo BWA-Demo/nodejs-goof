@@ -43,3 +43,8 @@ router.post('/', async (req, res, next) => {
     next();
   }
 })
+router.get('/Hello', (req, res) => {
+  const name = req.query.name || 'World';
+  const safeName = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  res.contentType('text/plain').send(`<h1>Hello ${safeName}</h1>`);
+})
